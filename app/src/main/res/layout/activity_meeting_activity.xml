@@ -2,58 +2,160 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="24dp">
+    android:background="@drawable/register_bg"
+    android:padding="20dp"
+    tools:context=".MeetingActivity">
+
 
     <TextView
         android:id="@+id/tvMeetingTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Meeting Started"
-        android:textSize="24sp"
+        android:layout_marginTop="24dp"
+        android:fontFamily="@font/bangers_regular"
+        android:letterSpacing="0.08"
+        android:text="VOTING"
+        android:textColor="#6EDDFF"
+        android:textSize="44sp"
+        android:shadowColor="#8000D2FF"
+        android:shadowDx="0"
+        android:shadowDy="4"
+        android:shadowRadius="10"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+
+    <TextView
+        android:id="@+id/tvTimer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Voting Ends In : 60 seconds"
+        android:textColor="#FF3B30"
+        android:textSize="15sp"
         android:textStyle="bold"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"/>
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvMeetingTitle" />
+
 
     <TextView
         android:id="@+id/tvPlayers"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Players will appear here"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:textColor="@color/white"
         android:textSize="16sp"
-        android:layout_marginTop="32dp"
-        app:layout_constraintTop_toBottomOf="@id/tvMeetingTitle"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        app:layout_constraintTop_toBottomOf="@id/tvTimer" />
 
-    <Button
-        android:id="@+id/btnVote"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="Vote First Player"
-        android:layout_marginTop="32dp"
-        app:layout_constraintTop_toBottomOf="@id/tvPlayers"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
 
-    <Button
-        android:id="@+id/btnSkip"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/gridContainer"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="Skip Vote"
+        android:layout_height="0dp"
         android:layout_marginTop="16dp"
-        app:layout_constraintTop_toBottomOf="@id/btnVote"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/card_translucent_dark"
+        android:padding="8dp"
+        app:layout_constraintBottom_toTopOf="@id/layoutActions"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        app:layout_constraintTop_toBottomOf="@id/tvPlayers">
 
-    <Button
-        android:id="@+id/btnEndVoting"
+        <!-- Grid of player cards -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvVotingPlayers"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:scrollbars="vertical"
+            app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            app:spanCount="2"
+            tools:listitem="@layout/item_voting_player"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Bottom Action Layout containing SKIP VOTE and SUBMIT VOTE -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/layoutActions"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="End Voting"
-        app:layout_constraintTop_toBottomOf="@id/btnSkip"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
+        android:layout_marginBottom="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- SKIP VOTE Button (Always Visible) -->
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnSkip"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:background="@drawable/btn_outline_blue"
+            android:fontFamily="@font/bangers_regular"
+            android:text="SKIP VOTE"
+            android:textColor="#00D2FF"
+            android:textSize="18sp"
+            android:letterSpacing="0.04"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/guidelineCenter"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            android:layout_marginEnd="8dp" />
+
+        <androidx.constraintlayout.widget.Guideline
+            android:id="@+id/guidelineCenter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            app:layout_constraintGuide_percent="0.5" />
+
+        <!-- SUBMIT VOTE Button (Visible/Enabled only when a player card is selected) -->
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnVote"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:background="@drawable/btn_outline_green"
+            android:fontFamily="@font/bangers_regular"
+            android:text="SUBMIT VOTE"
+            android:textColor="#00E676"
+            android:textSize="18sp"
+            android:letterSpacing="0.04"
+            android:visibility="invisible"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/guidelineCenter"
+            app:layout_constraintTop_toTopOf="parent"
+            android:layout_marginStart="8dp" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Optional HOST resolve button (Small/unobtrusive text link at top-right for game hosts) -->
+    <TextView
+        android:id="@+id/btnEndVoting"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="4dp"
+        android:text="END EARLY ✕"
+        android:textColor="#80FFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,98 +1,729 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@drawable/welcome_bg_hero"
+    android:padding="16dp"
+    tools:context=".GameActivity">
+
 
     <LinearLayout
-        android:orientation="vertical"
+        android:id="@+id/layoutTop"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:padding="16dp">
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:src="@drawable/ic_back_arrow"
+            android:padding="8dp"
+            android:background="@drawable/plus_circle_bg"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?android:attr/selectableItemBackground" />
+
+        <LinearLayout
+            android:id="@+id/layoutBroadcast"
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_weight="1"
+            android:layout_marginStart="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="12dp"
+            android:background="@drawable/card_translucent_dark">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_megaphone"
+                app:tint="#FF3333" />
+
+            <TextView
+                android:id="@+id/tvBroadcast"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="Broadcast: Welcome to the Station Map! Tap tasks below to solve."
+                android:textColor="#FF3333"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-medium"
+                android:singleLine="true"
+                android:ellipsize="marquee"
+                android:marqueeRepeatLimit="marquee_forever"
+                android:scrollHorizontally="true" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+
+    <LinearLayout
+        android:id="@+id/layoutGameInfo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="8dp"
+        android:paddingHorizontal="4dp"
+        app:layout_constraintTop_toBottomOf="@id/layoutTop"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
         <TextView
             android:id="@+id/tvRoomCode"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Room Code"
-            android:textSize="18sp"
-            android:textStyle="bold"/>
+            android:layout_weight="1"
+            android:text="Room Code: -"
+            android:textColor="#B3FFFFFF"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium" />
 
         <TextView
             android:id="@+id/tvRole"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Role"
-            android:textSize="20sp"
-            android:layout_marginTop="8dp"/>
+            android:text="Role: -"
+            android:textColor="#B3FFFFFF"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-bold"
+            android:layout_marginEnd="16dp" />
 
         <TextView
             android:id="@+id/tvStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Status"
-            android:layout_marginTop="4dp"/>
+            android:text="Status: -"
+            android:textColor="#B3FFFFFF"
+            android:textSize="12sp"
+            android:fontFamily="sans-serif-medium" />
 
-        <FrameLayout
+    </LinearLayout>
+
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cardMap"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/card_translucent_dark"
+        android:padding="12dp"
+        app:layout_constraintTop_toBottomOf="@id/layoutGameInfo"
+        app:layout_constraintBottom_toTopOf="@id/layoutCards"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <TextView
+            android:id="@+id/tvMapTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="• Station Map"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
+        <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
-            android:layout_height="250dp"
-            android:layout_marginTop="12dp">
+            android:layout_height="0dp"
+            android:layout_marginTop="8dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="#00000000"
+            app:layout_constraintTop_toBottomOf="@id/tvMapTitle"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
 
             <fragment
                 android:id="@+id/mapFragment"
                 android:name="com.google.android.gms.maps.SupportMapFragment"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"/>
-        </FrameLayout>
+                android:layout_height="match_parent" />
 
-        <TextView
-            android:id="@+id/tvMyPosition"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="My Position"
-            android:layout_marginTop="12dp"/>
+        </androidx.cardview.widget.CardView>
 
-        <TextView
-            android:id="@+id/tvNearbyPlayers"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Nearby Players"/>
-
-        <TextView
-            android:id="@+id/tvLastMovement"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Last Movement"/>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 
-        <Button
-            android:id="@+id/btnKill"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="KILL"
-            android:layout_marginTop="12dp"/>
+    <LinearLayout
+        android:id="@+id/layoutCards"
+        android:layout_width="match_parent"
+        android:layout_height="250dp"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal"
+        android:weightSum="2"
+        app:layout_constraintBottom_toTopOf="@id/layoutActions"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
-        <Button
-            android:id="@+id/btnReport"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="REPORT BODY"/>
 
-        <TextView
-            android:id="@+id/tvTaskProgress"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Tasks"
-            android:textStyle="bold"
-            android:layout_marginTop="12dp"/>
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.05"
+            android:layout_marginEnd="6dp"
+            android:orientation="vertical"
+            android:background="@drawable/card_translucent_dark"
+            android:padding="12dp">
 
-        <Button
-            android:id="@+id/btnTask"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Do Task"/>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="• Task List"
+                android:textColor="#33B5E5"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium" />
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginTop="8dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+
+                    <LinearLayout
+                        android:id="@+id/layoutTaskWires"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingVertical="6dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?android:attr/selectableItemBackground">
+
+                        <View
+                            android:id="@+id/indicatorTaskWires"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/plus_circle_bg"
+                            android:backgroundTint="#FFD24D" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvTaskWiresTitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Rewire System"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:fontFamily="sans-serif-medium" />
+
+                            <TextView
+                                android:id="@+id/tvTaskWiresSub"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Electrical Bay"
+                                android:textColor="#80FFFFFF"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+
+                    <LinearLayout
+                        android:id="@+id/layoutTaskMemory"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingVertical="6dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?android:attr/selectableItemBackground">
+
+                        <View
+                            android:id="@+id/indicatorTaskMemory"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/plus_circle_bg"
+                            android:backgroundTint="#B86BFF" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvTaskMemoryTitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Memory Matrix"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:fontFamily="sans-serif-medium" />
+
+                            <TextView
+                                android:id="@+id/tvTaskMemorySub"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Control Room"
+                                android:textColor="#80FFFFFF"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+
+                    <LinearLayout
+                        android:id="@+id/layoutTaskUpload"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingVertical="6dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?android:attr/selectableItemBackground">
+
+                        <View
+                            android:id="@+id/indicatorTaskUpload"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/plus_circle_bg"
+                            android:backgroundTint="#4BA6FF" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvTaskUploadTitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Upload Data"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:fontFamily="sans-serif-medium" />
+
+                            <TextView
+                                android:id="@+id/tvTaskUploadSub"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Server Hub"
+                                android:textColor="#80FFFFFF"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+
+                    <LinearLayout
+                        android:id="@+id/layoutTaskSensors"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingVertical="6dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?android:attr/selectableItemBackground">
+
+                        <View
+                            android:id="@+id/indicatorTaskSensors"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/plus_circle_bg"
+                            android:backgroundTint="#00FF88" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvTaskSensorsTitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Calibrate Sensors"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:fontFamily="sans-serif-medium" />
+
+                            <TextView
+                                android:id="@+id/tvTaskSensorsSub"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Navigation"
+                                android:textColor="#80FFFFFF"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+
+                    <LinearLayout
+                        android:id="@+id/layoutTaskTrivia"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingVertical="6dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?android:attr/selectableItemBackground">
+
+                        <View
+                            android:id="@+id/indicatorTaskTrivia"
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/plus_circle_bg"
+                            android:backgroundTint="#FF4B4B" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvTaskTriviaTitle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Answer Trivia"
+                                android:textColor="#FFFFFF"
+                                android:textSize="12sp"
+                                android:fontFamily="sans-serif-medium" />
+
+                            <TextView
+                                android:id="@+id/tvTaskTriviaSub"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Science Lab"
+                                android:textColor="#80FFFFFF"
+                                android:textSize="9sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </ScrollView>
+
+        </LinearLayout>
+
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.95"
+            android:layout_marginStart="6dp"
+            android:orientation="vertical"
+            android:background="@drawable/card_translucent_dark"
+            android:padding="12dp"
+            android:gravity="center_horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="• Overall Progress"
+                android:textColor="#33B5E5"
+                android:textSize="13sp"
+                android:fontFamily="sans-serif-medium"
+                android:layout_gravity="start" />
+
+            <FrameLayout
+                android:layout_width="140dp"
+                android:layout_height="140dp"
+                android:layout_marginTop="20dp"
+                android:gravity="center">
+
+                <ProgressBar
+                    android:id="@+id/circleProgress"
+                    style="@android:style/Widget.ProgressBar.Horizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:max="100"
+                    android:progress="0"
+                    android:progressDrawable="@drawable/progress_tasks" />
+
+                <TextView
+                    android:id="@+id/tvPercent"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0%"
+                    android:textColor="#00FF88"
+                    android:textSize="26sp"
+                    android:fontFamily="sans-serif-black"
+                    android:layout_gravity="center" />
+
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/tvTaskProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tasks: 0 / 25"
+                android:textColor="#B3FFFFFF"
+                android:textSize="12sp"
+                android:fontFamily="sans-serif-medium"
+                android:layout_marginTop="8dp" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
-</FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/layoutActions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal"
+        android:gravity="center"
+        app:layout_constraintBottom_toTopOf="@id/btnDoTask"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnReport"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:text="Report Body"
+            android:textColor="@android:color/white"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:drawableStart="@drawable/ic_megaphone"
+            android:drawablePadding="8dp"
+            android:paddingHorizontal="16dp"
+            android:background="@drawable/btn_red_gradient"
+            app:backgroundTint="@null"
+            android:elevation="4dp" />
+
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnAction"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="How to Play"
+            android:textColor="@android:color/white"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:drawableStart="@drawable/ic_help"
+            android:drawablePadding="8dp"
+            android:paddingHorizontal="16dp"
+            android:background="@drawable/btn_gradient"
+            app:backgroundTint="@null"
+            android:elevation="4dp" />
+
+    </LinearLayout>
+
+
+    <ImageView
+        android:id="@+id/btnDoTask"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:src="@drawable/ic_task_keypad"
+        android:padding="14dp"
+        android:background="@drawable/task_fab_bg"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground"
+        android:elevation="8dp"
+        android:layout_marginBottom="24dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+
+    <TextView
+        android:id="@+id/tvDoTaskLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Do Task"
+        android:textColor="#B3FFFFFF"
+        android:textSize="10sp"
+        android:fontFamily="sans-serif-medium"
+        android:layout_marginTop="2dp"
+        app:layout_constraintTop_toBottomOf="@id/btnDoTask"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Debug Mock Panel -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/layoutDebugControls"
+        android:layout_width="160dp"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="16dp"
+        android:visibility="gone"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="10dp"
+        app:cardBackgroundColor="#E61A1A24"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        tools:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="10dp"
+            android:gravity="center_horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="DEBUG PANEL"
+                android:textColor="#FF3B30"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"/>
+
+            <Button
+                android:id="@+id/btnToggleMockGPS"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:text="Enable Mock GPS"
+                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#FF9500"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Direction Pad -->
+            <GridLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:rowCount="3"
+                android:columnCount="3"
+                android:layout_marginBottom="8dp">
+
+                <!-- Row 1 -->
+                <Space android:layout_width="32dp" android:layout_height="32dp" />
+                <Button
+                    android:id="@+id/btnMockUp"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:text="▲"
+                    android:textSize="12sp"
+                    android:padding="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#33B5E5" />
+                <Space android:layout_width="32dp" android:layout_height="32dp" />
+
+                <!-- Row 2 -->
+                <Button
+                    android:id="@+id/btnMockLeft"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:text="◀"
+                    android:textSize="12sp"
+                    android:padding="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#33B5E5" />
+                <Space android:layout_width="32dp" android:layout_height="32dp" />
+                <Button
+                    android:id="@+id/btnMockRight"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:text="▶"
+                    android:textSize="12sp"
+                    android:padding="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#33B5E5" />
+
+                <!-- Row 3 -->
+                <Space android:layout_width="32dp" android:layout_height="32dp" />
+                <Button
+                    android:id="@+id/btnMockDown"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:text="▼"
+                    android:textSize="12sp"
+                    android:padding="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#33B5E5" />
+                <Space android:layout_width="32dp" android:layout_height="32dp" />
+
+            </GridLayout>
+
+            <Button
+                android:id="@+id/btnMockTeleportJSS"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:text="Teleport JSS Noida"
+                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#007AFF"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:layout_marginBottom="6dp" />
+
+            <Button
+                android:id="@+id/btnMockSpawnBody"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:text="Spawn Mock Body"
+                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#FF2D55"
+                android:insetTop="0dp"
+                android:insetBottom="0dp" />
+
+            <Button
+                android:id="@+id/btnMockToggleRole"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:text="Toggle Role"
+                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#5856D6"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="6dp" />
+
+            <Button
+                android:id="@+id/btnMockSimulateMeeting"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:text="Simulate Meeting"
+                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#4CD964"
+                android:insetTop="0dp"
+                android:insetBottom="0dp" />
+
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -51,7 +51,7 @@ class RegisterActivity : AppCompatActivity() {
 
         btnconfirm.setOnClickListener {
             val username = usernameEt.text.toString().trim()
-            val email = emailEt.text.toString().trim()
+            val email = emailEt.text.toString().trim().lowercase()
             val password = passwordEt.text.toString().trim()
 
             if (username.isEmpty() || email.isEmpty() || password.isEmpty()) {
@@ -102,7 +102,11 @@ class RegisterActivity : AppCompatActivity() {
                     btnconfirm.isEnabled = true
 
                     Toast.makeText(this, "SignUp Successful", Toast.LENGTH_SHORT).show()
-                    startActivity(Intent(this, FormActivity::class.java))
+                    val intent = Intent(this, FormActivity::class.java).apply {
+                        putExtra("username", usernameEt.text.toString().trim())
+                        putExtra("password", passwordEt.text.toString().trim())
+                    }
+                    startActivity(intent)
                     finish()
                 }
 

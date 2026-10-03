@@ -8,7 +8,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import com.example.uploadingscreen.databinding.ActivityLobbyBinding
-import com.example.uploadingscreen.model.Player
+import com.example.uploadingscreen.game.GameSession
 import com.example.uploadingscreen.network.SocketManager
 import com.example.uploadingscreen.utils.Resource
 import com.example.uploadingscreen.viewmodel.RoomViewModel
@@ -28,6 +28,14 @@ class LobbyActivity : AppCompatActivity() {
         viewModel = ViewModelProvider(this)[RoomViewModel::class.java]
 
         authToken = intent.getStringExtra("token")
+        if (!authToken.isNullOrEmpty()) {
+            getSharedPreferences("auth", MODE_PRIVATE)
+                .edit()
+                .putString("token", authToken)
+                .apply()
+        } else {
+            authToken = getSharedPreferences("auth", MODE_PRIVATE).getString("token", null)
+        }
 
         Log.d("TOKEN_DEBUG", "Token: $authToken")
 
@@ -37,6 +45,8 @@ class LobbyActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        GameSession.loadUser(this)
 
         SocketManager.init(authToken!!)
         SocketManager.connect()
@@ -73,11 +83,12 @@ class LobbyActivity : AppCompatActivity() {
 
                     binding.progressBar.visibility = View.GONE
 
-                    val roomCode = resource.data?.code
+                    val room = resource.data
 
-                    roomCode?.let {
+                    room?.code?.let {
+                        GameSession.enterRoom(it, room.maxPlayers, room.host)
                         SocketManager.setCurrentRoom(it)
-                        openWaitingRoom(it, true, null)
+                        openWaitingRoom(it)
                     }
                 }
 
@@ -99,12 +110,13 @@ class LobbyActivity : AppCompatActivity() {
 
                     binding.progressBar.visibility = View.GONE
 
-                    val roomCode = resource.data?.code
-                    val players = resource.data?.players
+                    val room = resource.data
 
-                    roomCode?.let {
+                    room?.code?.let {
+                        GameSession.enterRoom(it, room.maxPlayers, room.host)
+                        GameSession.setPlayers(room.players.associate { p -> p.userId to p.username }, room.host)
                         SocketManager.setCurrentRoom(it)
-                        openWaitingRoom(it, false, players)
+                        openWaitingRoom(it)
                     }
                 }
 
@@ -116,22 +128,10 @@ class LobbyActivity : AppCompatActivity() {
         }
     }
 
-    private fun openWaitingRoom(
-        roomCode: String,
-        isHost: Boolean,
-        players: List<Player>?
-    ) {
-
+    // room details (host, players, maxPlayers) are already in GameSession
+    private fun openWaitingRoom(roomCode: String) {
         val intent = Intent(this, WaitinRoomActivity::class.java)
-
         intent.putExtra("roomCode", roomCode)
-        intent.putExtra("isHost", isHost)
-
-        players?.let {
-            val usernames = it.map { player -> player.username }.toTypedArray()
-            intent.putExtra("players", usernames)
-        }
-
         startActivity(intent)
     }
 

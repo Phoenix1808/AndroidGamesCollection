@@ -41,9 +41,19 @@ class TriviaResultActivity : AppCompatActivity() {
         resultCard.startAnimation(AnimationUtils.loadAnimation(this, R.anim.scale_in))
         animateProgress(circleProgress, tvPercent, percent)
 
-        btnRestart.setOnClickListener {
-            startActivity(Intent(this, TriviaQuizActivity::class.java))
-            finish()
+        val isSuccess = score >= 20 // passing score is 50% (20 out of 40)
+        if (isSuccess) {
+            btnRestart.text = "Task Done"
+            btnRestart.setOnClickListener {
+                setResult(RESULT_OK)
+                finish()
+            }
+        } else {
+            btnRestart.text = "Retry Task"
+            btnRestart.setOnClickListener {
+                setResult(2) // custom RESULT_RETRY code
+                finish()
+            }
         }
     }
 

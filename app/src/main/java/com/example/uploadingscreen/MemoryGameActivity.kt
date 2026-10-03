@@ -89,6 +89,15 @@ class MemoryGameActivity : AppCompatActivity() {
                 cards[firstimg].tag = "open"
                 cards[secimg].tag = "open"
 
+                if (score >= 60) {
+                    findViewById<TextView>(R.id.txtSubtitle).text = "✨ TASK COMPLETED ✨"
+                    findViewById<TextView>(R.id.txtSubtitle).setTextColor(ContextCompat.getColor(this@MemoryGameActivity, android.R.color.holo_green_light))
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        setResult(RESULT_OK)
+                        finish()
+                    }, 1500)
+                }
+
             } else {
 
                

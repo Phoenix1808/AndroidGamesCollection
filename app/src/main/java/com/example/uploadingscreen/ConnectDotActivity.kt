@@ -105,6 +105,10 @@ class ConnectDotActivity : AppCompatActivity() {
                 animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(700)
                     .setInterpolator(OvershootInterpolator()).start()
             }
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                setResult(RESULT_OK)
+                finish()
+            }, 1500)
         }
     }
 
