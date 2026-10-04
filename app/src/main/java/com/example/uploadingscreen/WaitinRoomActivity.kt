@@ -179,17 +179,10 @@ class WaitinRoomActivity : AppCompatActivity() {
 
     private fun joinRoomSocket() {
 
-        val socket = SocketManager.getSocket()
-        if (socket == null) {
+        if (SocketManager.getSocket() == null) {
             leaveWithError("Not connected to the server. Please log in again.")
             return
         }
-
-        val payload = JSONObject().apply {
-            put("roomCode", roomCode)
-        }
-        //this enables the auto-rejoin after reconnection
-        SocketManager.setCurrentRoom(roomCode!!)
 
         var answered = false
         val timeout = Runnable {
@@ -197,8 +190,8 @@ class WaitinRoomActivity : AppCompatActivity() {
         }
         binding.root.postDelayed(timeout, JOIN_TIMEOUT_MS)
 
-        socket.emit("lobby:join-room", payload, io.socket.client.Ack { args ->
-            val ack = args.firstOrNull() as? JSONObject
+        // SocketManager sends the join (and rejoins after reconnects) without ever doubling it up
+        SocketManager.joinRoom(roomCode!!) { ack ->
             android.util.Log.d("GAME_DEBUG", "join-room ACK: $ack")
             runOnUiThread {
                 answered = true
@@ -208,7 +201,7 @@ class WaitinRoomActivity : AppCompatActivity() {
                     leaveWithError(reason ?: "Could not join the room")
                 }
             }
-        })
+        }
     }
 
     // "Room not found", "Game already started", "Room is full" etc.

@@ -68,16 +68,24 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
     private var lastKnownLat = 0.0
     private var lastKnownLng = 0.0
 
+    // What we last sent to the server. The server rewrites the whole game state on every game:move,
+    // so moves that land together with a kill/report/vote can wipe those out. Send as few as we can.
+    private var lastSentLat = 0.0
+    private var lastSentLng = 0.0
+    private var lastSentAt = 0L
+    // no automatic moves until this time (set around kills/reports)
+    private var movesPausedUntil = 0L
+
     // Background sync updates
     private val locationUpdateHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val locationUpdateRunnable = object : Runnable {
         override fun run() {
             if (!isFinishing && !isDestroyed) {
                 if (lastKnownLat != 0.0 && lastKnownLng != 0.0) {
-                    sendMove(lastKnownLat, lastKnownLng)
+                    maybeSendMove(lastKnownLat, lastKnownLng)
                     checkBodyNearby(lastKnownLat, lastKnownLng)
                 }
-                locationUpdateHandler.postDelayed(this, 3000)
+                locationUpdateHandler.postDelayed(this, MOVE_INTERVAL_MS)
             }
         }
     }
@@ -95,6 +103,12 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         private const val LOCATION_PERMISSION_REQUEST = 101
         // server accepts reports within 8m; stay a little under it to absorb GPS lag
         private const val REPORT_RANGE_METRES = 7.5f
+        // automatic position updates: at most one per interval, and only if we moved (or it's been a while)
+        private const val MOVE_INTERVAL_MS = 3000L
+        private const val MOVE_MIN_METRES = 1f
+        private const val MOVE_KEEPALIVE_MS = 10_000L
+        // gap between our fresh position and a kill/report, so the server doesn't process them together
+        private const val ACTION_AFTER_MOVE_MS = 700L
         private const val TASK_WIRES_REQUEST = 1001
         private const val TASK_MEMORY_REQUEST = 1002
         private const val TASK_UPLOAD_REQUEST = 1003
@@ -356,7 +370,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
                 lastKnownLat = lat
                 lastKnownLng = lng
 
-                sendMove(lat, lng)
+                maybeSendMove(lat, lng)
 
                 // update markers
                 if (::mMap.isInitialized) {
@@ -460,7 +474,30 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         }
 
         socket.emit("game:move", payload)
+        lastSentLat = lat
+        lastSentLng = lng
+        lastSentAt = System.currentTimeMillis()
         Log.d("MOVE_SENT", "My position: $lat,$lng")
+    }
+
+    // Throttled sender for GPS updates and the sync loop
+    private fun maybeSendMove(lat: Double, lng: Double) {
+        val now = System.currentTimeMillis()
+        if (now < movesPausedUntil) return
+        val sinceLast = now - lastSentAt
+        if (sinceLast < MOVE_INTERVAL_MS) return
+        val moved = FloatArray(1)
+        Location.distanceBetween(lastSentLat, lastSentLng, lat, lng, moved)
+        if (moved[0] >= MOVE_MIN_METRES || sinceLast >= MOVE_KEEPALIVE_MS) sendMove(lat, lng)
+    }
+
+    // Sends our current position, then runs the action shortly after, with automatic moves paused
+    private fun afterFreshPosition(action: () -> Unit) {
+        sendMove(lastKnownLat, lastKnownLng)
+        movesPausedUntil = System.currentTimeMillis() + ACTION_AFTER_MOVE_MS * 2
+        locationUpdateHandler.postDelayed({
+            if (!isFinishing && !isDestroyed) action()
+        }, ACTION_AFTER_MOVE_MS)
     }
 
     private fun listenForPlayerMovement() {
@@ -554,12 +591,11 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
             put("victimId", victimId)
         }
 
-        // refresh our position first so the server's range check uses where we are now
-        sendMove(lastKnownLat, lastKnownLng)
-        socket.emit("game:kill", payload)
-
         // re-enabled by the next game:nearby-targets; failures arrive as game:error toasts
         setKillEnabled(false)
+
+        // refresh our position first so the server's range check uses where we are now
+        afterFreshPosition { socket.emit("game:kill", payload) }
     }
 
     private fun setKillEnabled(enabled: Boolean) {
@@ -600,14 +636,30 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         val victimId = reportTargetBody?.victimId ?: return
         val socket = SocketManager.getSocket() ?: return
 
-        // Force send exact coordinates first so the server doesn't reject the report due to stale user location
-        sendMove(lastKnownLat, lastKnownLng)
-
         val payload = JSONObject().apply {
             put("roomCode", roomCode)
             put("bodyVictimId", victimId)
         }
 
+        // send exact coordinates first so the server doesn't reject the report due to a stale location
+        afterFreshPosition { emitReport(socket, payload) }
+
+        // SOLO DEBUG FALLBACK: If testing alone or offline, locally start the MeetingActivity
+        // so that the voting screen is viewable and interactive for layout check
+        if (!socket.connected() || playerMap.size <= 1) {
+            val intent = Intent(this, MeetingActivity::class.java).apply {
+                putExtra("roomCode", MeetingActivity.MOCK_ROOM)
+                val mockUserIds = arrayOf("uid1", "uid2", "uid3", "uid4")
+                val mockUsernames = arrayOf("Player 1", "Player 2", "Player 3", "Player 4")
+                putExtra("userIds", mockUserIds)
+                putExtra("usernames", mockUsernames)
+                putExtra("duration", 60)
+            }
+            startActivity(intent)
+        }
+    }
+
+    private fun emitReport(socket: io.socket.client.Socket, payload: JSONObject) {
         Log.d("REPORT_BODY", "Emitting game:report-body with payload: $payload")
         socket.emit("game:report-body", payload, io.socket.client.Ack { ackArgs ->
             if (ackArgs.isNotEmpty() && ackArgs[0] is JSONObject) {
@@ -621,24 +673,12 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
                         val message = ack.optString("message", "")
                         Log.e("REPORT_BODY_ERROR", message)
                         Toast.makeText(this@GameActivity, "Report failed: $message", Toast.LENGTH_SHORT).show()
+                        // our body list may be stale (already reported, or lost by the server); resync it
+                        requestBodies()
                     }
                 }
             }
         })
-
-        // SOLO DEBUG FALLBACK: If testing alone or offline, locally start the MeetingActivity
-        // so that the voting screen is viewable and interactive for layout check
-        if (!socket.connected() || playerMap.size <= 1) {
-            val intent = Intent(this, MeetingActivity::class.java).apply {
-                putExtra("roomCode", roomCode)
-                val mockUserIds = arrayOf("uid1", "uid2", "uid3", "uid4")
-                val mockUsernames = arrayOf("Player 1", "Player 2", "Player 3", "Player 4")
-                putExtra("userIds", mockUserIds)
-                putExtra("usernames", mockUsernames)
-                putExtra("duration", 60)
-            }
-            startActivity(intent)
-        }
     }
 
     private fun checkBodyNearby(myLat: Double, myLng: Double) {
@@ -714,17 +754,13 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
                 isInMeeting = true
                 fusedLocationClient.removeLocationUpdates(locationCallback)
                 locationUpdateHandler.removeCallbacks(locationUpdateRunnable)
+                // MeetingActivity reads the living players from GameSession
                 val intent = Intent(this, MeetingActivity::class.java).apply {
                     putExtra("roomCode", roomCode)
-                    putExtra("userIds", playerMap.keys.toTypedArray())
-                    putExtra("usernames", playerMap.values.toTypedArray())
-                    
-                    var duration = 60
-                    if (args.isNotEmpty() && args[0] is JSONObject) {
-                        val payload = args[0] as JSONObject
-                        duration = payload.optInt("duration", 60)
-                    }
-                    putExtra("duration", duration)
+                    // the server doesn't send a duration today; MeetingActivity defaults to its 120s
+                    (args.firstOrNull() as? JSONObject)?.optInt("duration", 0)
+                        ?.takeIf { it > 0 }
+                        ?.let { putExtra("duration", it) }
                 }
                 startActivity(intent)
             }

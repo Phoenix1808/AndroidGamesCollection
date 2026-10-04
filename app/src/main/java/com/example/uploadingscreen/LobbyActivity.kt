@@ -87,7 +87,6 @@ class LobbyActivity : AppCompatActivity() {
 
                     room?.code?.let {
                         GameSession.enterRoom(it, room.maxPlayers, room.host)
-                        SocketManager.setCurrentRoom(it)
                         openWaitingRoom(it)
                     }
                 }
@@ -120,7 +119,6 @@ class LobbyActivity : AppCompatActivity() {
                             p.userId to (p.username ?: ownName ?: "Player")
                         }
                         GameSession.setPlayers(known, room.host)
-                        SocketManager.setCurrentRoom(it)
                         openWaitingRoom(it)
                     }
                 }
