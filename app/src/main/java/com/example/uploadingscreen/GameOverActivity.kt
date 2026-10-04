@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.uploadingscreen.databinding.ActivityGameOverBinding
+import com.example.uploadingscreen.network.SocketManager
 
 class GameOverActivity : AppCompatActivity() {
 
@@ -18,6 +19,9 @@ class GameOverActivity : AppCompatActivity() {
 
         binding = ActivityGameOverBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // the server deletes the game on game:ended; don't auto-rejoin it after a reconnect
+        SocketManager.clrRoom()
 
         val winner = intent.getStringExtra("winner")
         val role = intent.getStringExtra("role")

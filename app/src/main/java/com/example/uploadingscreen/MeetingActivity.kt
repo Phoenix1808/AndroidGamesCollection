@@ -7,11 +7,14 @@ import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
 import com.example.uploadingscreen.adapter.VotingPlayerAdapter
 import com.example.uploadingscreen.databinding.ActivityMeetingActivityBinding
+import com.example.uploadingscreen.game.GameSession
 import com.example.uploadingscreen.network.SocketManager
+import io.socket.emitter.Emitter
 import org.json.JSONObject
 import java.util.Random
 
@@ -22,12 +25,19 @@ class MeetingActivity : AppCompatActivity() {
 
     private var roomCode: String? = null
     private val votedPlayer = mutableSetOf<String>()
-    private val playerMap = mutableMapOf<String, String>() // userId -> username
+    private val playerMap = mutableMapOf<String, String>() // userId -> username, alive players only
     private val userIdsList = mutableListOf<String>()
 
     private var timer: CountDownTimer? = null
 
-    // Simulation Handlers
+    // host only: make sure we ask the server to resolve at most once
+    private var resolveRequested = false
+    private var resultReceived = false
+
+    // own listener instance so we never remove GameActivity's game:ended handler
+    private val gameEndedListener = Emitter.Listener { runOnUiThread { finish() } }
+
+    // Offline sandbox, only reachable from the debug panel (roomCode == MOCK_LOBBY)
     private val mockHandler = Handler(Looper.getMainLooper())
     private var isMockMode = false
 
@@ -39,14 +49,22 @@ class MeetingActivity : AppCompatActivity() {
                 val randomVoterId = remainingVoters.random()
                 votedPlayer.add(randomVoterId)
                 adapter.notifyDataSetChanged()
-                
+
                 val username = playerMap[randomVoterId] ?: "Player"
                 Log.d("MOCK_VOTE", "$username voted (mock)")
-                
+
                 // Cycle next vote in 3 seconds
                 mockHandler.postDelayed(this, 3000)
             }
         }
+    }
+
+    companion object {
+        const val MOCK_ROOM = "MOCK_LOBBY"
+        // server's MEETING_DURATION_MS
+        private const val MEETING_SECONDS = 120
+        // how long the result stays on screen before going back to the map
+        private const val RESULT_DISPLAY_MS = 3000L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,53 +73,42 @@ class MeetingActivity : AppCompatActivity() {
         binding = ActivityMeetingActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Retrieve intent extras
-        roomCode = intent.getStringExtra("roomCode")
-        val userIdsArray = intent.getStringArrayExtra("userIds")
-        val usernamesArray = intent.getStringArrayExtra("usernames")
-        val duration = intent.getIntExtra("duration", 60)
-
-        // Populate player lists
-        if (userIdsArray != null && usernamesArray != null) {
-            for (i in userIdsArray.indices) {
-                val uid = userIdsArray[i]
-                val uname = usernamesArray[i]
-                playerMap[uid] = uname
-                userIdsList.add(uid)
-            }
-        }
-
-        // Determine if we should run in Offline Mock Simulation mode
-        val socket = SocketManager.getSocket()
-        isMockMode = (roomCode == "MOCK_LOBBY") || (socket == null) || (!socket.connected())
+        roomCode = intent.getStringExtra("roomCode") ?: GameSession.roomCode
+        isMockMode = roomCode == MOCK_ROOM
 
         if (isMockMode) {
             Log.d("SOCKET_DEBUG", "Running MeetingActivity in OFFLINE MOCK MODE")
-        } else {
-            if (socket == null || !socket.connected()) {
-                Log.e("SOCKET_DEBUG", "Warning: Socket is NOT connected inside MeetingActivity!")
-                Toast.makeText(this, "Connection lost! Attempting to reconnect...", Toast.LENGTH_SHORT).show()
+            val userIdsArray = intent.getStringArrayExtra("userIds")
+            val usernamesArray = intent.getStringArrayExtra("usernames")
+            if (userIdsArray != null && usernamesArray != null) {
+                for (i in userIdsArray.indices) {
+                    playerMap[userIdsArray[i]] = usernamesArray[i]
+                    userIdsList.add(userIdsArray[i])
+                }
             }
+        } else {
+            // only living players can be voted for
+            val alive = GameSession.alivePlayers()
+            playerMap.putAll(alive)
+            userIdsList.addAll(alive.keys)
         }
 
         setupRecyclerView()
-        startTimer(duration)
+        startTimer(intent.getIntExtra("duration", MEETING_SECONDS))
 
-        // Setup Socket Listeners or run Sandbox Simulation
         if (isMockMode) {
             runMockSimulation()
         } else {
             listenVoteUpdate()
             listenVoteResult()
             listenFreeplayResumed()
+            SocketManager.getSocket()?.on("game:ended", gameEndedListener)
         }
 
-        // Bind Skip Button (emits targetId as null or skips locally)
         binding.btnSkip.setOnClickListener {
             sendVote(null)
         }
 
-        // Bind Submit Vote Button (emits targetId as selectedPlayerId or submits locally)
         binding.btnVote.setOnClickListener {
             val selectedId = adapter.getSelectedPlayerId()
             if (selectedId != null) {
@@ -111,15 +118,27 @@ class MeetingActivity : AppCompatActivity() {
             }
         }
 
-        // Bind Host End Voting Early button
-        binding.btnEndVoting.visibility = View.VISIBLE
+        // the server only accepts game:resolve-votes from the host
+        binding.btnEndVoting.visibility = if (isMockMode || GameSession.isHost) View.VISIBLE else View.GONE
         binding.btnEndVoting.setOnClickListener {
             resolveVoteEarly()
+        }
+
+        // leaving the meeting screen would put us back on the map while voting continues
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                Toast.makeText(this@MeetingActivity, "Meeting in progress", Toast.LENGTH_SHORT).show()
+            }
+        })
+
+        if (!isMockMode && GameSession.amIDead) {
+            disableVotingInput()
+            showStatus("You are dead, watching the vote", android.R.color.darker_gray)
         }
     }
 
     private fun setupRecyclerView() {
-        adapter = VotingPlayerAdapter(userIdsList, playerMap, votedPlayer) { selectedPlayerId ->
+        adapter = VotingPlayerAdapter(userIdsList, playerMap, votedPlayer, GameSession.myUserId) { selectedPlayerId ->
             runOnUiThread {
                 if (selectedPlayerId != null) {
                     binding.btnVote.visibility = View.VISIBLE
@@ -141,11 +160,15 @@ class MeetingActivity : AppCompatActivity() {
             }
 
             override fun onFinish() {
-                binding.tvTimer.text = "Voting Ended"
-                disableVotingInput()
                 if (isMockMode) {
+                    binding.tvTimer.text = "Voting Ended"
+                    disableVotingInput()
                     showMockEjectionResult()
+                    return
                 }
+                // The server decides when voting is over; keep inputs open until game:vote-result
+                binding.tvTimer.text = "Waiting for results…"
+                autoResolveIfHost("timer ended")
             }
         }.start()
     }
@@ -165,24 +188,23 @@ class MeetingActivity : AppCompatActivity() {
         val socket = SocketManager.getSocket() ?: return
         val payload = JSONObject().apply {
             put("roomCode", roomCode)
-            put("targetId", targetId)
+            put("targetId", targetId ?: JSONObject.NULL)
         }
 
         Log.d("VOTE_DEBUG", "Emitting game:vote with payload: $payload")
         socket.emit("game:vote", payload, io.socket.client.Ack { ackArgs ->
-            if (ackArgs.isNotEmpty() && ackArgs[0] is JSONObject) {
-                val ack = ackArgs[0] as JSONObject
-                val ok = ack.optBoolean("ok")
-                val message = ack.optString("message", "")
+            val ack = ackArgs.firstOrNull() as? JSONObject ?: return@Ack
+            val ok = ack.optBoolean("ok")
+            val message = ack.optString("message", "")
 
-                runOnUiThread {
-                    if (ok) {
-                        Log.d("VOTE_DEBUG", "Vote processed successfully on server.")
-                        disableVotingInput()
-                    } else {
-                        Log.e("VOTE_DEBUG", "Vote rejected by server: $message")
-                        Toast.makeText(this@MeetingActivity, "Vote error: $message", Toast.LENGTH_SHORT).show()
-                    }
+            runOnUiThread {
+                if (ok) {
+                    Log.d("VOTE_DEBUG", "Vote processed successfully on server.")
+                    disableVotingInput()
+                    GameSession.myUserId?.let { onVoterSeen(it) }
+                } else {
+                    Log.e("VOTE_DEBUG", "Vote rejected by server: $message")
+                    Toast.makeText(this@MeetingActivity, "Vote error: $message", Toast.LENGTH_SHORT).show()
                 }
             }
         })
@@ -192,19 +214,27 @@ class MeetingActivity : AppCompatActivity() {
         val socket = SocketManager.getSocket() ?: return
         socket.off("game:vote-update")
         socket.on("game:vote-update") { args ->
-            if (args.isNotEmpty() && args[0] is JSONObject) {
-                val data = args[0] as JSONObject
-                val voterId = data.optString("voterId", "")
-                if (voterId.isNotEmpty()) {
-                    val username = playerMap[voterId] ?: "Unknown"
-                    votedPlayer.add(voterId)
-                    Log.d("VOTE_DEBUG", "Player voted: $username ($voterId)")
-                    runOnUiThread {
-                        adapter.notifyDataSetChanged()
-                    }
-                }
-            }
+            val data = args.firstOrNull() as? JSONObject ?: return@on
+            val voterId = data.optString("voterId", "")
+            if (voterId.isEmpty()) return@on
+            Log.d("VOTE_DEBUG", "Player voted: ${playerMap[voterId] ?: "Unknown"} ($voterId)")
+            runOnUiThread { onVoterSeen(voterId) }
         }
+    }
+
+    private fun onVoterSeen(voterId: String) {
+        if (!votedPlayer.add(voterId)) return
+        adapter.notifyDataSetChanged()
+        // the server sometimes misses that everyone has voted (lost updates), so the host nudges it
+        if (userIdsList.isNotEmpty() && votedPlayer.containsAll(userIdsList)) {
+            autoResolveIfHost("all players voted")
+        }
+    }
+
+    private fun autoResolveIfHost(reason: String) {
+        if (isMockMode || !GameSession.isHost || resultReceived) return
+        Log.d("VOTE_DEBUG", "Host auto-resolving votes: $reason")
+        requestResolve(showErrors = false)
     }
 
     private fun resolveVoteEarly() {
@@ -212,27 +242,34 @@ class MeetingActivity : AppCompatActivity() {
             runOnUiThread {
                 Toast.makeText(this, "Voting ended early by host (Mock).", Toast.LENGTH_SHORT).show()
                 disableVotingInput()
+                binding.btnEndVoting.isEnabled = false
                 showMockEjectionResult()
             }
             return
         }
+        requestResolve(showErrors = true)
+    }
 
+    private fun requestResolve(showErrors: Boolean) {
+        if (resolveRequested || resultReceived) return
         val socket = SocketManager.getSocket() ?: return
+        resolveRequested = true
         val payload = JSONObject().apply {
             put("roomCode", roomCode)
         }
 
         Log.d("VOTE_DEBUG", "Emitting game:resolve-votes")
         socket.emit("game:resolve-votes", payload, io.socket.client.Ack { ackArgs ->
-            if (ackArgs.isNotEmpty() && ackArgs[0] is JSONObject) {
-                val ack = ackArgs[0] as JSONObject
-                val ok = ack.optBoolean("ok")
-                runOnUiThread {
-                    if (ok) {
-                        Log.d("VOTE_DEBUG", "Host successfully ended voting early.")
-                    } else {
-                        Log.e("VOTE_DEBUG", "Failed to resolve votes early (likely not host or already resolved).")
-                        Toast.makeText(this@MeetingActivity, "Only the Host can end voting early!", Toast.LENGTH_SHORT).show()
+            val ack = ackArgs.firstOrNull() as? JSONObject
+            runOnUiThread {
+                if (ack?.optBoolean("ok") == true) {
+                    Log.d("VOTE_DEBUG", "resolve-votes accepted")
+                } else {
+                    // allow another attempt (e.g. the timer firing after a failed early end)
+                    resolveRequested = false
+                    Log.e("VOTE_DEBUG", "resolve-votes rejected: ${ack?.optString("message")}")
+                    if (showErrors) {
+                        Toast.makeText(this@MeetingActivity, "Could not end voting", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -243,29 +280,33 @@ class MeetingActivity : AppCompatActivity() {
         val socket = SocketManager.getSocket() ?: return
         socket.off("game:vote-result")
         socket.on("game:vote-result") { args ->
-            if (args.isNotEmpty() && args[0] is JSONObject) {
-                val data = args[0] as JSONObject
-                val result = data.optJSONObject("result") ?: return@on
-                val type = result.optString("type", "")
+            val data = args.firstOrNull() as? JSONObject ?: return@on
+            val result = data.optJSONObject("result") ?: return@on
+            val type = result.optString("type", "")
+            // the server sends "eject" with a null playerId when nobody got votes
+            val ejectedId = if (result.isNull("playerId")) null else result.optString("playerId").takeIf { it.isNotEmpty() }
 
-                runOnUiThread {
-                    timer?.cancel()
-                    disableVotingInput()
+            runOnUiThread {
+                resultReceived = true
+                timer?.cancel()
+                binding.tvTimer.text = "Voting Ended"
+                disableVotingInput()
+                binding.btnEndVoting.isEnabled = false
 
-                    // Visual Feedback of Vote Results
-                    binding.tvPlayers.visibility = View.VISIBLE
-                    if (type == "eject") {
-                        val playerId = result.optString("playerId", "")
-                        val username = playerMap[playerId] ?: "Unknown"
-                        binding.tvPlayers.text = "$username was ejected."
-                        binding.tvPlayers.setTextColor(getColor(android.R.color.holo_red_light))
-                        Log.d("VOTE_DEBUG", "Vote result: Ejected $username")
+                if (type == "eject" && ejectedId != null) {
+                    GameSession.deadPlayers.add(ejectedId)
+                    val text = if (ejectedId == GameSession.myUserId) {
+                        "You were ejected."
                     } else {
-                        binding.tvPlayers.text = "Vote tied. No one ejected."
-                        binding.tvPlayers.setTextColor(getColor(android.R.color.white))
-                        Log.d("VOTE_DEBUG", "Vote result: Tie/No one ejected")
+                        "${GameSession.usernameOf(ejectedId)} was ejected."
                     }
+                    showStatus(text, android.R.color.holo_red_light)
+                    Log.d("VOTE_DEBUG", "Vote result: ejected $ejectedId")
+                } else {
+                    showStatus(if (type == "tie") "Vote tied. No one was ejected." else "No one was ejected.", android.R.color.white)
+                    Log.d("VOTE_DEBUG", "Vote result: no ejection ($type)")
                 }
+                // a non-null winner is followed by game:ended, which closes this screen
             }
         }
     }
@@ -276,9 +317,16 @@ class MeetingActivity : AppCompatActivity() {
         socket.on("game:freeplay-resumed") {
             Log.d("VOTE_DEBUG", "Freeplay resumed. Finishing MeetingActivity.")
             runOnUiThread {
-                finish()
+                // leave the result on screen for a moment before going back to the map
+                mockHandler.postDelayed({ if (!isFinishing) finish() }, RESULT_DISPLAY_MS)
             }
         }
+    }
+
+    private fun showStatus(text: String, colorRes: Int) {
+        binding.tvPlayers.visibility = View.VISIBLE
+        binding.tvPlayers.text = text
+        binding.tvPlayers.setTextColor(getColor(colorRes))
     }
 
     // --- Mock Simulation Handlers ---
@@ -294,7 +342,7 @@ class MeetingActivity : AppCompatActivity() {
         binding.tvPlayers.visibility = View.VISIBLE
         // Randomly decide ejection or tie
         val isTied = Random().nextBoolean()
-        if (isTied) {
+        if (isTied || userIdsList.isEmpty()) {
             binding.tvPlayers.text = "Vote tied. No one ejected (Mock)."
             binding.tvPlayers.setTextColor(getColor(android.R.color.white))
         } else {
@@ -314,21 +362,22 @@ class MeetingActivity : AppCompatActivity() {
         }, 4000)
     }
 
+    // END EARLY stays usable for the host after they voted; it's switched off once the result is in
     private fun disableVotingInput() {
         binding.btnVote.isEnabled = false
         binding.btnSkip.isEnabled = false
-        binding.btnEndVoting.isEnabled = false
         adapter.isEnabled = false
     }
 
     override fun onDestroy() {
         super.onDestroy()
         timer?.cancel()
-        mockHandler.removeCallbacks(mockVotersRunnable)
+        mockHandler.removeCallbacksAndMessages(null)
 
         val socket = SocketManager.getSocket()
         socket?.off("game:vote-update")
         socket?.off("game:vote-result")
         socket?.off("game:freeplay-resumed")
+        socket?.off("game:ended", gameEndedListener)
     }
 }

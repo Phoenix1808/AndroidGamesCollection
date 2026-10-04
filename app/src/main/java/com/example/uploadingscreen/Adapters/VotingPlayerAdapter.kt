@@ -12,6 +12,7 @@ class VotingPlayerAdapter(
     private val userIds: List<String>,
     private val playerMap: Map<String, String>,
     private val votedPlayers: Set<String>,
+    private val myUserId: String? = null,
     private val onPlayerSelected: (String?) -> Unit
 ) : RecyclerView.Adapter<VotingPlayerAdapter.VotingViewHolder>() {
 
@@ -46,7 +47,7 @@ class VotingPlayerAdapter(
         val username = playerMap[userId] ?: "Player ${position + 1}"
 
         // Format name to uppercase to fit cyberpunk vibe
-        holder.tvName.text = username.uppercase()
+        holder.tvName.text = if (userId == myUserId) "${username.uppercase()} (YOU)" else username.uppercase()
 
         // Assign a consistent character avatar by cycling through available resources
         val avatarRes = avatars[position % avatars.size]
