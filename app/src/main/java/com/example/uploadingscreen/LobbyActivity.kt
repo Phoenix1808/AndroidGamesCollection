@@ -114,7 +114,12 @@ class LobbyActivity : AppCompatActivity() {
 
                     room?.code?.let {
                         GameSession.enterRoom(it, room.maxPlayers, room.host)
-                        GameSession.setPlayers(room.players.associate { p -> p.userId to p.username }, room.host)
+                        // lookup has no usernames; lobby:players-list fills in the real ones after joining
+                        val known = room.players.associate { p ->
+                            val ownName = if (p.userId == GameSession.myUserId) GameSession.myUsername else null
+                            p.userId to (p.username ?: ownName ?: "Player")
+                        }
+                        GameSession.setPlayers(known, room.host)
                         SocketManager.setCurrentRoom(it)
                         openWaitingRoom(it)
                     }

@@ -34,7 +34,8 @@ class GameEndHandler(
 
 
     //game:error
-    fun gameError(){
+    // onError(event, message) runs on the socket thread
+    fun gameError(onError: ((String, String) -> Unit)? = null){
         socket?.off("game:error")
         socket?.on("game:error"){args->
             if(args.isNotEmpty() && args[0] is JSONObject){
@@ -42,6 +43,8 @@ class GameEndHandler(
                 val event = data.optString("event")
                 val msg = data.optString("message")
                 Log.d("GAME_ERROR","$event -> $msg")
+                // position updates fire every few seconds; don't spam the player about them
+                if (event != "game:move" && msg.isNotEmpty()) onError?.invoke(event, msg)
             }
         }
     }

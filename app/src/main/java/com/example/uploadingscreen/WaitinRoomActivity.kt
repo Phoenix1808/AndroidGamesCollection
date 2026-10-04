@@ -47,8 +47,18 @@ class WaitinRoomActivity : AppCompatActivity() {
 
             android.util.Log.d("GAME_DEBUG", "Host clicked start")
 
+            binding.btnStartGame.isEnabled = false
             socket.emit("game:start", payload, io.socket.client.Ack { args ->
-                android.util.Log.d("GAME_DEBUG", "Start game ACK: $args")
+                android.util.Log.d("GAME_DEBUG", "Start game ACK: ${args.firstOrNull()}")
+                val ack = args.firstOrNull() as? JSONObject
+                runOnUiThread {
+                    // on success game:started / game:role take us to the map
+                    if (ack?.optBoolean("ok") != true) {
+                        binding.btnStartGame.isEnabled = true
+                        val reason = ack?.optString("message").takeUnless { it.isNullOrEmpty() }
+                        Toast.makeText(this, reason ?: "Could not start the game", Toast.LENGTH_SHORT).show()
+                    }
+                }
             })
         }
 
@@ -74,8 +84,9 @@ class WaitinRoomActivity : AppCompatActivity() {
         }
 
         renderPlayers()
-        joinRoomSocket()
+        // listen first: players-list / game:started can arrive right after the join
         setupSocket()
+        joinRoomSocket()
     }
 
     private fun setupSocket() {
@@ -94,6 +105,8 @@ class WaitinRoomActivity : AppCompatActivity() {
                 val data = args[0] as JSONObject
                 val playersArray = data.getJSONArray("players")
                 val hostId = data.getString("hostId")
+
+                android.util.Log.d("GAME_DEBUG", "players-list received: ${playersArray.length()} players")
 
                 val roster = LinkedHashMap<String, String>()
                 for (i in 0 until playersArray.length()) {
@@ -166,7 +179,11 @@ class WaitinRoomActivity : AppCompatActivity() {
 
     private fun joinRoomSocket() {
 
-        val socket = SocketManager.getSocket() ?: return
+        val socket = SocketManager.getSocket()
+        if (socket == null) {
+            leaveWithError("Not connected to the server. Please log in again.")
+            return
+        }
 
         val payload = JSONObject().apply {
             put("roomCode", roomCode)
@@ -174,7 +191,32 @@ class WaitinRoomActivity : AppCompatActivity() {
         //this enables the auto-rejoin after reconnection
         SocketManager.setCurrentRoom(roomCode!!)
 
-        socket.emit("lobby:join-room", payload)
+        var answered = false
+        val timeout = Runnable {
+            if (!answered && !isFinishing) leaveWithError("Server is not responding. Try again.")
+        }
+        binding.root.postDelayed(timeout, JOIN_TIMEOUT_MS)
+
+        socket.emit("lobby:join-room", payload, io.socket.client.Ack { args ->
+            val ack = args.firstOrNull() as? JSONObject
+            android.util.Log.d("GAME_DEBUG", "join-room ACK: $ack")
+            runOnUiThread {
+                answered = true
+                binding.root.removeCallbacks(timeout)
+                if (ack?.optBoolean("ok") != true) {
+                    val reason = ack?.optString("message").takeUnless { it.isNullOrEmpty() }
+                    leaveWithError(reason ?: "Could not join the room")
+                }
+            }
+        })
+    }
+
+    // "Room not found", "Game already started", "Room is full" etc.
+    private fun leaveWithError(message: String) {
+        if (isFinishing) return
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        SocketManager.clrRoom()
+        finish() // back to LobbyActivity
     }
 
     override fun onDestroy() {
@@ -201,6 +243,10 @@ class WaitinRoomActivity : AppCompatActivity() {
     }
 
     private fun updatePlayerCount() {
-        binding.tvPlayerCount.text = "(${players.size}/6)"
+        binding.tvPlayerCount.text = "(${players.size}/${GameSession.maxPlayers})"
+    }
+
+    companion object {
+        private const val JOIN_TIMEOUT_MS = 15_000L
     }
 }

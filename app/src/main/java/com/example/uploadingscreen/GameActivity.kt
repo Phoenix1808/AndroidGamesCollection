@@ -41,8 +41,10 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private var currentVictimId: String? = null
 
+    // unreported bodies, kept in sync with the server via game:get-bodies
     private val deadBodies = mutableListOf<DeadBody>()
-    private val deadPlayerIds = mutableSetOf<String>()
+    private val bodyMarkers = mutableMapOf<String, Marker>()
+    private val deadPlayerIds get() = GameSession.deadPlayers
     private var reportTargetBody: DeadBody? = null
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -91,7 +93,8 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
 
     companion object {
         private const val LOCATION_PERMISSION_REQUEST = 101
-        private const val REPORT_RANGE_METRES = 15f
+        // server accepts reports within 8m; stay a little under it to absorb GPS lag
+        private const val REPORT_RANGE_METRES = 7.5f
         private const val TASK_WIRES_REQUEST = 1001
         private const val TASK_MEMORY_REQUEST = 1002
         private const val TASK_UPLOAD_REQUEST = 1003
@@ -106,6 +109,14 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
 
         binding = ActivityGameBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // edge-to-edge: keep the top bar (back button) out from under the status bar
+        val basePadding = binding.root.paddingTop
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(binding.root) { v, insets ->
+            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            v.setPadding(basePadding + bars.left, basePadding + bars.top, basePadding + bars.right, basePadding + bars.bottom)
+            insets
+        }
 
         // Enable emergency broadcast marquee scroll
         binding.tvBroadcast.isSelected = true
@@ -128,6 +139,8 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
                 binding.btnAction.text = "Kill"
                 binding.btnAction.setBackgroundResource(R.drawable.btn_red_gradient)
                 binding.btnAction.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_skull, 0, 0, 0)
+                // enabled by game:nearby-targets once a crewmate is in range
+                setKillEnabled(false)
             } else {
                 binding.tvRole.setTextColor(getColor(android.R.color.holo_green_dark))
                 binding.btnAction.text = "How to Play"
@@ -138,10 +151,11 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
             binding.tvStatus.text = "Role Not Assigned"
         }
 
-        // Configure Back Button
-        binding.btnBack.setOnClickListener {
-            finish()
-        }
+        // Leaving mid-game can't be undone (the server won't let us rejoin), so confirm first
+        binding.btnBack.setOnClickListener { confirmLeave() }
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = confirmLeave()
+        })
 
         // Action Button click (Kill for Imposters, How to Play for Crewmates)
         binding.btnAction.setOnClickListener {
@@ -193,13 +207,15 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
 
         lifeHandler = GameEndHandler(this, role)
         lifeHandler.gameEnd()
-        lifeHandler.gameError()
+        lifeHandler.gameError { _, message ->
+            runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
+        }
 
         listenForPlayerMovement()
         listenForTargets()
         listenForKillEvent()
         listenMeetingStart()
-        requestBodies()
+        // bodies are (re)loaded in onResume
 
         setupLocation()
         setupDebugMockControls()
@@ -216,6 +232,10 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun launchTask(taskName: String) {
+        if (GameSession.amIDead) {
+            Toast.makeText(this, "You are dead and can't do tasks", Toast.LENGTH_SHORT).show()
+            return
+        }
         val intent = when (taskName) {
             "wires" -> Intent(this, ConnectDotActivity::class.java)
             "memory" -> Intent(this, MemoryGameActivity::class.java)
@@ -304,6 +324,9 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         ) {
             mMap.isMyLocationEnabled = true
         }
+
+        // bodies may have been loaded before the map was ready
+        deadBodies.forEach { addBodyMarker(it) }
 
         mMap.setOnMarkerClickListener { marker ->
             val title = marker.title
@@ -419,6 +442,10 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
             Log.d("MOVE_BLOCKED", "Movement blocked because we are in a meeting.")
             return
         }
+        // no GPS fix yet; sending 0,0 would teleport us into the ocean
+        if (lat == 0.0 && lng == 0.0) return
+        // dead players don't move on other players' maps
+        if (GameSession.amIDead) return
         val socket = SocketManager.getSocket() ?: return
 
         val payload = JSONObject().apply {
@@ -445,8 +472,8 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
                 val data = args[0] as JSONObject
                 val userId = data.getString("userId")
 
-                // Do not show a duplicate marker for ourselves on the map
-                if (userId == SocketManager.getSocket()?.id()) return@on
+                // the server echoes our own moves back; "You" marker already covers us
+                if (userId == GameSession.myUserId) return@on
 
                 val username = playerMap[userId] ?: "Unknown"
                 val position = data.getJSONObject("position")
@@ -483,10 +510,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
 
                 runOnUiThread {
                     val count = targets.length()
-                    if (role == "imposter") {
-                        binding.btnAction.isEnabled = (count > 0)
-                        binding.btnAction.alpha = if (count > 0) 1f else 0.5f
-                    }
+                    if (role == "imposter") setKillEnabled(count > 0)
 
                     if (count > 0) {
                         val victim = targets.getJSONObject(0)
@@ -499,50 +523,28 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    private fun handleKillLocally(victimId: String, lat: Double, lng: Double) {
+    // Called only for server-confirmed kills (game:kill-event). Winning is decided by the server via game:ended.
+    private fun onKillConfirmed(victimId: String, lat: Double, lng: Double) {
         if (deadPlayerIds.contains(victimId)) return
         deadPlayerIds.add(victimId)
 
-        // Add dead body locally
-        deadBodies.add(DeadBody(victimId, lat, lng))
+        val body = DeadBody(victimId, lat, lng)
+        deadBodies.add(body)
+        addBodyMarker(body)
 
-        // Add dead body marker
-        if (::mMap.isInitialized) {
-            mMap.addMarker(
-                MarkerOptions()
-                    .position(LatLng(lat, lng))
-                    .title("Dead Body")
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
-            )
-        }
+        // the victim no longer walks around
+        playerMarkers.remove(victimId)?.remove()
 
-        // Update Marquee Broadcast & Alert
         val username = playerMap[victimId] ?: "Unknown Player"
-        binding.tvBroadcast.text = "Emergency Broadcast: $username has been found dead!"
-        Toast.makeText(this@GameActivity, "$username was eliminated!", Toast.LENGTH_LONG).show()
-
-        // Instantly evaluate if report body button should be displayed
-        checkBodyNearby(lastKnownLat, lastKnownLng)
-
-        // Check Win Condition locally as a fallback
-        // Total players = playerMap.size
-        // Imposters = 1 (usually in 3 or 4 player games)
-        // Alive crewmates = (playerMap.size - 1) - deadPlayerIds.size
-        val aliveCrewmates = (playerMap.size - 1) - deadPlayerIds.size
-        if (aliveCrewmates <= 1) {
-            // Wait 1.5 seconds to see if server event game:ended is received.
-            // If not, transition locally.
-            binding.root.postDelayed({
-                if (!isFinishing && !isDestroyed) {
-                    val intent = Intent(this, GameOverActivity::class.java).apply {
-                        putExtra("winner", "imposter")
-                        putExtra("role", role)
-                    }
-                    startActivity(intent)
-                    finish()
-                }
-            }, 1500)
+        if (victimId == GameSession.myUserId) {
+            Toast.makeText(this, "You were killed!", Toast.LENGTH_LONG).show()
+            applyDeadState()
+        } else {
+            binding.tvBroadcast.text = "Emergency Broadcast: $username has been found dead!"
+            Toast.makeText(this, "$username was eliminated!", Toast.LENGTH_LONG).show()
         }
+
+        checkBodyNearby(lastKnownLat, lastKnownLng)
     }
 
     private fun sendKill(victimId: String) {
@@ -552,15 +554,27 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
             put("victimId", victimId)
         }
 
+        // refresh our position first so the server's range check uses where we are now
+        sendMove(lastKnownLat, lastKnownLng)
         socket.emit("game:kill", payload)
-        if (role == "imposter") {
-            binding.btnAction.isEnabled = false
-        }
 
-        // Handle kill locally immediately on the Imposter's screen
-        val myLat = if (isMockLocation) mockLat else (myMarker?.position?.latitude ?: mockLat)
-        val myLng = if (isMockLocation) mockLng else (myMarker?.position?.longitude ?: mockLng)
-        handleKillLocally(victimId, myLat, myLng)
+        // re-enabled by the next game:nearby-targets; failures arrive as game:error toasts
+        setKillEnabled(false)
+    }
+
+    private fun setKillEnabled(enabled: Boolean) {
+        binding.btnAction.isEnabled = enabled
+        binding.btnAction.alpha = if (enabled) 1f else 0.5f
+    }
+
+    private fun addBodyMarker(body: DeadBody) {
+        if (!::mMap.isInitialized || bodyMarkers.containsKey(body.victimId)) return
+        mMap.addMarker(
+            MarkerOptions()
+                .position(LatLng(body.lat, body.lng))
+                .title("Dead Body")
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+        )?.let { bodyMarkers[body.victimId] = it }
     }
 
     private fun listenForKillEvent() {
@@ -576,7 +590,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
                 val lng = position.getDouble("lng")
 
                 runOnUiThread {
-                    handleKillLocally(victimId, lat, lng)
+                    onKillConfirmed(victimId, lat, lng)
                 }
             }
         }
@@ -628,6 +642,11 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun checkBodyNearby(myLat: Double, myLng: Double) {
+        if (GameSession.amIDead) {
+            reportTargetBody = null
+            binding.btnReport.visibility = View.GONE
+            return
+        }
         var foundBody: DeadBody? = null
 
         for (body in deadBodies) {
@@ -655,12 +674,35 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
+    // Replaces our body list with the server's unreported bodies (reported ones disappear after a meeting)
     private fun requestBodies() {
         val socket = SocketManager.getSocket() ?: return
         val payload = JSONObject().apply {
             put("roomCode", roomCode)
         }
-        socket.emit("game:get-bodies", payload)
+        socket.emit("game:get-bodies", payload, io.socket.client.Ack { args ->
+            val ack = args.firstOrNull() as? JSONObject ?: return@Ack
+            if (!ack.optBoolean("ok")) return@Ack
+            val arr = ack.optJSONArray("bodies") ?: return@Ack
+            val fresh = (0 until arr.length()).mapNotNull { i ->
+                val b = arr.optJSONObject(i) ?: return@mapNotNull null
+                DeadBody(b.optString("victimId"), b.optDouble("lat"), b.optDouble("lng"))
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                bodyMarkers.values.forEach { it.remove() }
+                bodyMarkers.clear()
+                deadBodies.clear()
+                deadBodies.addAll(fresh)
+                fresh.forEach {
+                    deadPlayerIds.add(it.victimId)
+                    playerMarkers.remove(it.victimId)?.remove()
+                    addBodyMarker(it)
+                }
+                applyDeadState()
+                checkBodyNearby(lastKnownLat, lastKnownLng)
+            }
+        })
     }
 
     private fun listenMeetingStart() {
@@ -698,6 +740,30 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         // Start/resume the 3-second background location sync loop
         locationUpdateHandler.removeCallbacks(locationUpdateRunnable)
         locationUpdateHandler.post(locationUpdateRunnable)
+
+        // on first open and after every meeting: reported bodies are gone, ejected players are dead
+        requestBodies()
+        applyDeadState()
+    }
+
+    private fun applyDeadState() {
+        if (!GameSession.amIDead) return
+        binding.tvStatus.text = "YOU ARE DEAD"
+        binding.tvStatus.setTextColor(getColor(android.R.color.holo_red_light))
+        binding.tvBroadcast.text = "You are dead. Watch the rest of the game."
+        binding.btnReport.visibility = View.GONE
+        binding.btnDoTask.visibility = View.GONE
+        binding.tvDoTaskLabel.visibility = View.GONE
+        if (role == "imposter") setKillEnabled(false)
+    }
+
+    private fun confirmLeave() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Leave game?")
+            .setMessage("You won't be able to rejoin this game.")
+            .setPositiveButton("Leave") { _, _ -> finish() }
+            .setNegativeButton("Stay", null)
+            .show()
     }
 
     override fun onPause() {
@@ -737,7 +803,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
             if (taskName != null) {
                 taskStates[taskName] = true
                 updateTaskUI(taskName, true)
-                if (role == "crewmate") {
+                if (role == "crewmate" && !GameSession.amIDead) {
                     taskHandler.TaskComplete()
                 }
 
@@ -881,6 +947,9 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
     private fun updateMockLocation() {
+        // the 3s sync loop sends lastKnown*, so it must follow the mock position too
+        lastKnownLat = mockLat
+        lastKnownLng = mockLng
         sendMove(mockLat, mockLng)
         if (::mMap.isInitialized) {
             val latLng = com.google.android.gms.maps.model.LatLng(mockLat, mockLng)
