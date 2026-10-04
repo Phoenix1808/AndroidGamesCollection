@@ -161,8 +161,25 @@ class TriviaQuizActivity : AppCompatActivity() {
             val intent = Intent(this, TriviaResultActivity::class.java)
             intent.putExtra("SCORE", score)
             intent.putExtra("MAX_SCORE", questions.size * 10)
-            startActivity(intent)
-            finish()
+            startActivityForResult(intent, TRIVIA_RESULT_REQUEST_CODE)
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == TRIVIA_RESULT_REQUEST_CODE) {
+            if (resultCode == 2) { // custom RESULT_RETRY code
+                score = 0
+                currentIndex = 0
+                loadQuestion()
+            } else {
+                setResult(resultCode)
+                finish()
+            }
+        }
+    }
+
+    companion object {
+        private const val TRIVIA_RESULT_REQUEST_CODE = 201
     }
 }

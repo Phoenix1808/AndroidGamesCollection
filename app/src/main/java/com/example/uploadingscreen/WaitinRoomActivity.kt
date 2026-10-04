@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.uploadingscreen.adapter.PlayerAdapter
 import com.example.uploadingscreen.databinding.ActivityWaitinRoomBinding
+import com.example.uploadingscreen.game.GameSession
 import com.example.uploadingscreen.network.SocketManager
 import org.json.JSONObject
 
@@ -15,11 +16,10 @@ class WaitinRoomActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWaitinRoomBinding
 
     private lateinit var adapter: PlayerAdapter
+    // display strings for the adapter, rebuilt from GameSession.players
     private val players = mutableListOf<String>()
-    private val playerMap = HashMap<String,String>()
 
     private var roomCode: String? = null
-    private var isHost: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
 
@@ -28,8 +28,7 @@ class WaitinRoomActivity : AppCompatActivity() {
         binding = ActivityWaitinRoomBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        roomCode = intent.getStringExtra("roomCode")
-        isHost = intent.getBooleanExtra("isHost", false)
+        roomCode = intent.getStringExtra("roomCode") ?: GameSession.roomCode
 
         binding.tvRoomCode.text = roomCode
 
@@ -37,8 +36,6 @@ class WaitinRoomActivity : AppCompatActivity() {
 
         binding.rvPlayers.layoutManager = LinearLayoutManager(this)
         binding.rvPlayers.adapter = adapter
-
-        binding.btnStartGame.isEnabled = isHost
 
         binding.btnStartGame.setOnClickListener {
 
@@ -76,21 +73,7 @@ class WaitinRoomActivity : AppCompatActivity() {
             binding.layoutRulesPopup.visibility = android.view.View.GONE
         }
 
-        val existingPlayers = intent.getStringArrayExtra("players")
-        existingPlayers?.let {
-
-            players.clear()
-            players.addAll(it)
-
-            if (isHost && players.isNotEmpty()) {
-                players[0] = players[0] + " (Host)"
-            }
-
-            adapter.notifyDataSetChanged()
-            updatePlayerCount()
-        }
-
-        updatePlayerCount()
+        renderPlayers()
         joinRoomSocket()
         setupSocket()
     }
@@ -112,27 +95,18 @@ class WaitinRoomActivity : AppCompatActivity() {
                 val playersArray = data.getJSONArray("players")
                 val hostId = data.getString("hostId")
 
+                val roster = LinkedHashMap<String, String>()
+                for (i in 0 until playersArray.length()) {
+                    if (playersArray.isNull(i)) continue
+                    val player = playersArray.optJSONObject(i) ?: continue
+                    val userId = player.optString("userId", "")
+                    if (userId.isEmpty()) continue
+                    roster[userId] = player.optString("username", "Player")
+                }
+
                 runOnUiThread {
-
-                    players.clear()
-                    playerMap.clear()
-
-                    for (i in 0 until playersArray.length()) {
-
-                        val player = playersArray.getJSONObject(i)
-                        val username = player.getString("username")
-                        val userId = player.getString("userId")
-
-                        playerMap[userId] = username
-                        if (userId == hostId) {
-                            players.add("$username (Host)")
-                        } else {
-                            players.add(username)
-                        }
-                    }
-
-                    adapter.notifyDataSetChanged()
-                    updatePlayerCount()
+                    GameSession.setPlayers(roster, hostId)
+                    renderPlayers()
                 }
             }
         }
@@ -143,6 +117,7 @@ class WaitinRoomActivity : AppCompatActivity() {
 
                 val data = args[0] as JSONObject
                 val username = data.getString("username")
+                val userId = data.optString("userId", "")
 
                 runOnUiThread {
 
@@ -152,6 +127,11 @@ class WaitinRoomActivity : AppCompatActivity() {
                         Toast.LENGTH_SHORT
                     ).show()
 
+                    // Fallback in case players-list is late; it will overwrite this anyway
+                    if (userId.isNotEmpty() && userId !in GameSession.players) {
+                        GameSession.players[userId] = username
+                        renderPlayers()
+                    }
                 }
             }
         }
@@ -172,17 +152,11 @@ class WaitinRoomActivity : AppCompatActivity() {
                 val role = data.optString("role")
 
                 runOnUiThread {
+                    GameSession.role = role
 
+                    // players, host and role are read from GameSession
                     val intent = Intent(this, GameActivity::class.java)
-
                     intent.putExtra("roomCode", roomCode)
-                    intent.putExtra("role", role)
-
-                    val userIds = playerMap.keys.toTypedArray()
-                    val usernames = playerMap.values.toTypedArray()
-                    intent.putExtra("userIds",userIds)
-                    intent.putExtra("usernames",usernames)
-
                     startActivity(intent)
                     finish()
                 }
@@ -212,6 +186,18 @@ class WaitinRoomActivity : AppCompatActivity() {
         socket?.off("lobby:player-joined")
         socket?.off("game:started")
         socket?.off("game:role")
+    }
+
+    private fun renderPlayers() {
+        players.clear()
+        for ((userId, username) in GameSession.players) {
+            players.add(if (userId == GameSession.hostId) "$username (Host)" else username)
+        }
+        adapter.notifyDataSetChanged()
+        updatePlayerCount()
+
+        binding.btnStartGame.visibility =
+            if (GameSession.isHost) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun updatePlayerCount() {

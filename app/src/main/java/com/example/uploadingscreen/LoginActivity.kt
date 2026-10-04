@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import com.example.uploadingscreen.databinding.ActivityLoginBinding
+import com.example.uploadingscreen.game.GameSession
 import com.example.uploadingscreen.model.LoginRequest
 import com.example.uploadingscreen.utils.Resource
 import com.example.uploadingscreen.viewmodel.AuthViewModel
@@ -60,6 +61,19 @@ class LoginActivity : AppCompatActivity() {
             viewModel.login(req)
         }
 
+        val isAutoLogin = intent.getBooleanExtra("isAutoLogin", false)
+        if (isAutoLogin) {
+            val userExtra = intent.getStringExtra("username")
+            val passExtra = intent.getStringExtra("password")
+            if (!userExtra.isNullOrEmpty() && !passExtra.isNullOrEmpty()) {
+                binding.etUsername.setText(userExtra)
+                binding.etPassword.setText(passExtra)
+                username = userExtra
+                val req = LoginRequest(userExtra, passExtra)
+                viewModel.login(req)
+            }
+        }
+
         viewModel.loginRes.observe(this) { resource ->
 
             when (resource) {
@@ -78,11 +92,13 @@ class LoginActivity : AppCompatActivity() {
 
                     Toast.makeText(this, "Login Success", Toast.LENGTH_SHORT).show()
 
-//                    getSharedPreferences("auth", MODE_PRIVATE)
-//                        .edit()
-//                        .putString("token", response?.accessToken)
-//                        .putString("username", username)
-//                        .apply()
+                    getSharedPreferences("auth", MODE_PRIVATE)
+                        .edit()
+                        .putString("token", response?.accessToken)
+                        .putString("username", response?.user?.username ?: username)
+                        .putString("userId", response?.user?.id)
+                        .apply()
+                    GameSession.loadUser(this)
 
                     val intent = Intent(this, LobbyActivity::class.java)
                     intent.putExtra("token", response?.accessToken)

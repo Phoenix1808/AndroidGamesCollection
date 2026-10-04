@@ -41,11 +41,11 @@ class FormActivity : AppCompatActivity() {
         }
 
         btncontinue.setOnClickListener {
-            val branch = branch.text.toString().trim()
-            val year = year.text.toString().trim()
-            val group = group.text.toString().trim()
+            val branchVal = branch.text.toString().trim()
+            val yearVal = year.text.toString().trim()
+            val groupVal = group.text.toString().trim()
 
-            if(branch.isEmpty()|| year.isEmpty() || group.isEmpty()){
+            if(branchVal.isEmpty()|| yearVal.isEmpty() || groupVal.isEmpty()){
                 Toast.makeText(
                     this,
                     "Please fill all details",
@@ -53,12 +53,15 @@ class FormActivity : AppCompatActivity() {
                 ).show()
                 return@setOnClickListener
             }
-            val prefs = getSharedPreferences("users_prefs",MODE_PRIVATE)
-            prefs.edit()
-                .putBoolean("isProfileComplete",true)
-                .apply()
 
-            startActivity(Intent(this,AvatarActivity::class.java))
+            val username = intent.getStringExtra("username")
+            val password = intent.getStringExtra("password")
+
+            val nextIntent = Intent(this, AvatarActivity::class.java).apply {
+                putExtra("username", username)
+                putExtra("password", password)
+            }
+            startActivity(nextIntent)
             finish()
         }
     }

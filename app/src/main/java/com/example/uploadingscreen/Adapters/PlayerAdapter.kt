@@ -26,7 +26,8 @@ class PlayerAdapter(
     override fun getItemCount(): Int = players.size
 
     override fun onBindViewHolder(holder: PlayerViewHolder, position: Int) {
-        val rawText = players[position]
+        val item: Any? = if (position >= 0 && position < players.size) players[position] else null
+        val rawText = item?.toString() ?: "Player"
         val isHost = rawText.endsWith(" (Host)")
         val displayName = if (isHost) {
             rawText.substring(0, rawText.length - 7).trim()

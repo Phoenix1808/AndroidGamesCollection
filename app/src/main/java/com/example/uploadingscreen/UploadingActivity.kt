@@ -40,6 +40,7 @@ class UploadingActivity : AppCompatActivity() {
 
     private fun onUploadComplete() {
         Toast.makeText(this, "Task Completed", Toast.LENGTH_SHORT).show()
+        setResult(RESULT_OK)
         finish()
     }
 

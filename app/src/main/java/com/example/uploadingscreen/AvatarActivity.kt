@@ -53,7 +53,15 @@ class AvatarActivity : AppCompatActivity() {
                 .putInt("selectedAvatar", selectedAvatarRes)
                 .apply()
 
-            startActivity(Intent(this, MainActivity::class.java))
+            val username = intent.getStringExtra("username")
+            val password = intent.getStringExtra("password")
+
+            val loginIntent = Intent(this, LoginActivity::class.java).apply {
+                putExtra("username", username)
+                putExtra("password", password)
+                putExtra("isAutoLogin", true)
+            }
+            startActivity(loginIntent)
             finish()
         }
     }

@@ -52,6 +52,7 @@
         android:layout_height="wrap_content"
         android:id="@+id/labelUser"
         android:text="User Name"
+        android:textStyle="bold"
         android:textSize="12sp"
         android:textColor="#E4E2D4"
         app:layout_constraintTop_toBottomOf="@id/txtRegister"
@@ -80,10 +81,11 @@
         android:id="@+id/labelEmail"
         android:text="Email"
         android:textSize="12sp"
+        android:textStyle="bold"
         android:textColor="#E4E2D4"
         app:layout_constraintTop_toBottomOf="@id/etUserName"
         app:layout_constraintStart_toStartOf="parent"
-        android:layout_marginTop="28dp"
+        android:layout_marginTop="24dp"
         android:layout_marginStart="32dp"/>
     <EditText
         android:layout_width="0dp"
@@ -108,6 +110,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="32dp"
         android:layout_marginTop="68dp"
+        android:textStyle="bold"
         android:text="Password"
         android:textColor="#E4E2D4"
         android:textSize="12sp"
