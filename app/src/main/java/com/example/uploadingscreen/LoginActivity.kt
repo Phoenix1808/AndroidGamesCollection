@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.uploadingscreen.databinding.ActivityLoginBinding
 import com.example.uploadingscreen.game.GameSession
 import com.example.uploadingscreen.model.LoginRequest
+import com.example.uploadingscreen.network.SessionManager
 import com.example.uploadingscreen.utils.Resource
 import com.example.uploadingscreen.viewmodel.AuthViewModel
 
@@ -27,6 +28,11 @@ class LoginActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         viewModel = ViewModelProvider(this)[AuthViewModel::class.java]
+
+        // "Your session expired..." when sent here by SessionManager
+        intent.getStringExtra(SessionManager.EXTRA_NOTICE)?.let {
+            Toast.makeText(this, it, Toast.LENGTH_LONG).show()
+        }
 
         var isVisible = false
 
@@ -99,6 +105,7 @@ class LoginActivity : AppCompatActivity() {
                         .putString("userId", response?.user?.id)
                         .apply()
                     GameSession.loadUser(this)
+                    SessionManager.onLoggedIn()
 
                     val intent = Intent(this, LobbyActivity::class.java)
                     intent.putExtra("token", response?.accessToken)

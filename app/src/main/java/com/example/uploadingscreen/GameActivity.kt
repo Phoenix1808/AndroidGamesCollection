@@ -132,7 +132,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
             insets
         }
 
-        // Enable emergency broadcast marquee scroll
+        // Broadcast banner scrolls a few times per message (marqueeRepeatLimit), not forever
         binding.tvBroadcast.isSelected = true
 
         val mapFragment = supportFragmentManager
@@ -232,7 +232,8 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         // bodies are (re)loaded in onResume
 
         setupLocation()
-        setupDebugMockControls()
+        // 5 taps on the room code opens the mock GPS / fake meeting panel; never in release builds
+        if (BuildConfig.DEBUG) setupDebugMockControls()
     }
 
     private fun nextIncompleteTask(): String? {
@@ -344,7 +345,9 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
 
         mMap.setOnMarkerClickListener { marker ->
             val title = marker.title
-            if (title != "You" && title != "Dead Body" && title != null) {
+            val debugPanelOpen = BuildConfig.DEBUG && binding.layoutDebugControls.visibility == View.VISIBLE
+            val isBody = title?.startsWith("Dead", ignoreCase = true) == true
+            if (debugPanelOpen && title != "You" && !isBody && title != null) {
                 val pos = marker.position
                 mockLat = pos.latitude
                 mockLng = pos.longitude
@@ -378,6 +381,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
                     if (myMarker == null) {
                         myMarker = mMap.addMarker(
                             MarkerOptions().position(latLng).title("You")
+                                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
                         )
                         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 17f))
                     } else {
@@ -439,6 +443,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
                         if (myMarker == null) {
                             myMarker = mMap.addMarker(
                                 MarkerOptions().position(latLng).title("You")
+                                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
                             )
                             mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 17f))
                         } else {
@@ -524,8 +529,10 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
                         if (playerMarkers.containsKey(userId)) {
                             playerMarkers[userId]?.position = latLng
                         } else {
+                            // green = living player; red pins are only ever bodies
                             val marker = mMap.addMarker(
                                 MarkerOptions().position(latLng).title(username)
+                                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN))
                             )
                             marker?.let { playerMarkers[userId] = it }
                         }
@@ -577,7 +584,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
             Toast.makeText(this, "You were killed!", Toast.LENGTH_LONG).show()
             applyDeadState()
         } else {
-            binding.tvBroadcast.text = "Emergency Broadcast: $username has been found dead!"
+            showBroadcast("Emergency Broadcast: $username has been found dead!")
             Toast.makeText(this, "$username was eliminated!", Toast.LENGTH_LONG).show()
         }
 
@@ -608,7 +615,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         mMap.addMarker(
             MarkerOptions()
                 .position(LatLng(body.lat, body.lng))
-                .title("Dead Body")
+                .title("Dead body: ${playerMap[body.victimId] ?: "Unknown"}")
                 .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
         )?.let { bodyMarkers[body.victimId] = it }
     }
@@ -643,20 +650,6 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
 
         // send exact coordinates first so the server doesn't reject the report due to a stale location
         afterFreshPosition { emitReport(socket, payload) }
-
-        // SOLO DEBUG FALLBACK: If testing alone or offline, locally start the MeetingActivity
-        // so that the voting screen is viewable and interactive for layout check
-        if (!socket.connected() || playerMap.size <= 1) {
-            val intent = Intent(this, MeetingActivity::class.java).apply {
-                putExtra("roomCode", MeetingActivity.MOCK_ROOM)
-                val mockUserIds = arrayOf("uid1", "uid2", "uid3", "uid4")
-                val mockUsernames = arrayOf("Player 1", "Player 2", "Player 3", "Player 4")
-                putExtra("userIds", mockUserIds)
-                putExtra("usernames", mockUsernames)
-                putExtra("duration", 60)
-            }
-            startActivity(intent)
-        }
     }
 
     private fun emitReport(socket: io.socket.client.Socket, payload: JSONObject) {
@@ -780,13 +773,38 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         // on first open and after every meeting: reported bodies are gone, ejected players are dead
         requestBodies()
         applyDeadState()
+        GameSession.deadPlayers.forEach { playerMarkers.remove(it)?.remove() }
+
+        SocketManager.connectionListener = onConnectionChange
+        if (SocketManager.getSocket()?.connected() == false) onConnectionChange(false)
+    }
+
+    // A dropped connection reconnects by itself; if the server then refuses us back into the game,
+    // SessionManager takes the player to the lobby with an explanation.
+    private var connectionLost = false
+    private val onConnectionChange: (Boolean) -> Unit = { connected ->
+        if (!connected && !connectionLost) {
+            connectionLost = true
+            Toast.makeText(this, "Connection lost. Reconnecting...", Toast.LENGTH_LONG).show()
+            showBroadcast("Connection lost. Reconnecting...")
+        } else if (connected) {
+            connectionLost = false
+        }
+    }
+
+    private fun showBroadcast(message: String) {
+        if (binding.tvBroadcast.text.toString() == message) return
+        binding.tvBroadcast.text = message
+        // restart the marquee for the new message
+        binding.tvBroadcast.isSelected = false
+        binding.tvBroadcast.isSelected = true
     }
 
     private fun applyDeadState() {
         if (!GameSession.amIDead) return
         binding.tvStatus.text = "YOU ARE DEAD"
         binding.tvStatus.setTextColor(getColor(android.R.color.holo_red_light))
-        binding.tvBroadcast.text = "You are dead. Watch the rest of the game."
+        showBroadcast("You are dead. Watch the rest of the game.")
         binding.btnReport.visibility = View.GONE
         binding.btnDoTask.visibility = View.GONE
         binding.tvDoTaskLabel.visibility = View.GONE
@@ -809,6 +827,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
         }
         // Stop the background sync loop to prevent emitting moves during meetings
         locationUpdateHandler.removeCallbacks(locationUpdateRunnable)
+        if (SocketManager.connectionListener === onConnectionChange) SocketManager.connectionListener = null
     }
 
     override fun onDestroy() {
@@ -992,6 +1011,7 @@ class GameActivity : AppCompatActivity(), OnMapReadyCallback {
             if (myMarker == null) {
                 myMarker = mMap.addMarker(
                     com.google.android.gms.maps.model.MarkerOptions().position(latLng).title("You")
+                                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
                 )
             } else {
                 myMarker?.position = latLng

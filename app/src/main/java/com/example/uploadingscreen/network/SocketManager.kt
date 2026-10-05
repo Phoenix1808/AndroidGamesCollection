@@ -1,5 +1,7 @@
 package com.example.uploadingscreen.network
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import io.socket.client.Ack
 import io.socket.client.IO
@@ -10,7 +12,12 @@ import org.json.JSONObject
 object SocketManager {
 
     private var socket: Socket? = null
+    private var socketToken: String? = null
     private var currentRoomCode: String? = null
+
+    // The open game/meeting screen sets this to hear about connection drops; called on the main thread
+    var connectionListener: ((connected: Boolean) -> Unit)? = null
+    private val main = Handler(Looper.getMainLooper())
 
     // Keys are "<socketId>:<roomCode>". The server is not safe against concurrent duplicate joins
     // (two arriving together create two player records), so never send a second join while one is
@@ -24,8 +31,12 @@ object SocketManager {
         try {
 
             if (socket != null) {
-                Log.d("SOCKET", "Socket already initialized")
-                return
+                if (token == socketToken) {
+                    Log.d("SOCKET", "Socket already initialized")
+                    return
+                }
+                // logged in again: the server checks the token only when connecting, so start over
+                disconnect()
             }
 
             val opts = IO.Options()
@@ -41,17 +52,26 @@ object SocketManager {
                 Log.d("SOCKET", "Connected ID: ${s.id()}")
                 // first connect or reconnect: (re)join the room we belong to, once for this connection
                 if (currentRoomCode != null) emitJoin(s, force = false)
+                main.post { connectionListener?.invoke(true) }
             }
 
             s.on(Socket.EVENT_DISCONNECT) {
                 Log.d("SOCKET", "Disconnected")
+                main.post { connectionListener?.invoke(false) }
             }
 
-            s.on(Socket.EVENT_CONNECT_ERROR) {
-                Log.e("SOCKET", "Connection error")
+            s.on(Socket.EVENT_CONNECT_ERROR) { args ->
+                // network trouble arrives as an exception; the server's auth check as {"message":"Invalid token"}
+                val error = args.firstOrNull()
+                val message = (error as? JSONObject)?.optString("message") ?: (error as? Exception)?.message
+                Log.e("SOCKET", "Connection error: $message")
+                if (error is JSONObject && message?.contains("token", ignoreCase = true) == true) {
+                    SessionManager.onTokenRejected()
+                }
             }
 
             socket = s
+            socketToken = token
 
         } catch (e: Exception) {
             Log.e("SOCKET", "Initialization error: ${e.message}")
@@ -106,12 +126,18 @@ object SocketManager {
         s.emit("lobby:join-room", payload, Ack { args ->
             val ack = args.firstOrNull() as? JSONObject
             Log.d("SOCKET", "join-room $room ack: $ack")
+            val ok = ack?.optBoolean("ok") == true
             val callback = synchronized(this) {
                 if (inFlightKey == key) inFlightKey = null
-                joinedKey = if (ack?.optBoolean("ok") == true) key else null
+                joinedKey = if (ok) key else null
                 pendingAck.also { pendingAck = null }
             }
-            callback?.invoke(ack)
+            if (callback != null) {
+                callback(ack)
+            } else if (!ok && ack != null && currentRoomCode == room) {
+                // automatic rejoin after a reconnect was refused: we're no longer in this room/game
+                SessionManager.onRemovedFromRoom(ack.optString("message").takeUnless { it.isEmpty() })
+            }
         })
     }
 
@@ -129,6 +155,7 @@ object SocketManager {
         socket?.disconnect()
         socket?.off()
         socket = null
+        socketToken = null
         clrRoom()
     }
 }
