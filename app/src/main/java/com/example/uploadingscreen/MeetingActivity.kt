@@ -369,6 +369,21 @@ class MeetingActivity : AppCompatActivity() {
         adapter.isEnabled = false
     }
 
+    override fun onResume() {
+        super.onResume()
+        SocketManager.connectionListener = onConnectionChange
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (SocketManager.connectionListener === onConnectionChange) SocketManager.connectionListener = null
+    }
+
+    // votes can't reach the server while offline; a refused rejoin is handled by SessionManager
+    private val onConnectionChange: (Boolean) -> Unit = { connected ->
+        if (!connected) Toast.makeText(this, "Connection lost. Reconnecting...", Toast.LENGTH_LONG).show()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         timer?.cancel()

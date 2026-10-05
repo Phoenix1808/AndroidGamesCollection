@@ -31,6 +31,12 @@ object GameSession {
 
     fun usernameOf(userId: String?): String = players[userId] ?: "Unknown"
 
+    // Stable per-player index (join order) for picking avatars; fallback if the player isn't known
+    fun avatarIndex(userId: String, fallback: Int): Int {
+        val index = players.keys.indexOf(userId)
+        return if (index >= 0) index else fallback
+    }
+
     // Restores the logged-in user after the app process was recreated
     fun loadUser(context: Context) {
         val prefs = context.getSharedPreferences("auth", Context.MODE_PRIVATE)

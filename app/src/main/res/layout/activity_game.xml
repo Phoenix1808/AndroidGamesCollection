@@ -60,7 +60,7 @@
                 android:fontFamily="sans-serif-medium"
                 android:singleLine="true"
                 android:ellipsize="marquee"
-                android:marqueeRepeatLimit="marquee_forever"
+                android:marqueeRepeatLimit="3"
                 android:scrollHorizontally="true" />
 
         </LinearLayout>

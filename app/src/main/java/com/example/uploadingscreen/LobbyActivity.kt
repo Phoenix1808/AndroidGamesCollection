@@ -5,10 +5,12 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import com.example.uploadingscreen.databinding.ActivityLobbyBinding
 import com.example.uploadingscreen.game.GameSession
+import com.example.uploadingscreen.network.SessionManager
 import com.example.uploadingscreen.network.SocketManager
 import com.example.uploadingscreen.utils.Resource
 import com.example.uploadingscreen.viewmodel.RoomViewModel
@@ -37,11 +39,16 @@ class LobbyActivity : AppCompatActivity() {
             authToken = getSharedPreferences("auth", MODE_PRIVATE).getString("token", null)
         }
 
-        Log.d("TOKEN_DEBUG", "Token: $authToken")
-
         if (authToken.isNullOrEmpty()) {
             toast("Authentication token missing")
             startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+
+        // tokens last 15 minutes; don't wait for the server to reject an old one
+        if (SessionManager.isTokenExpired(authToken!!)) {
+            SessionManager.onTokenRejected()
             finish()
             return
         }
@@ -50,6 +57,14 @@ class LobbyActivity : AppCompatActivity() {
 
         SocketManager.init(authToken!!)
         SocketManager.connect()
+
+        // e.g. "Connection lost..." after being dropped from a game
+        intent.getStringExtra(SessionManager.EXTRA_NOTICE)?.let { notice ->
+            AlertDialog.Builder(this)
+                .setMessage(notice)
+                .setPositiveButton("OK", null)
+                .show()
+        }
 
         binding.btnCreateRoom.setOnClickListener {
             viewModel.createRoom(authToken!!)

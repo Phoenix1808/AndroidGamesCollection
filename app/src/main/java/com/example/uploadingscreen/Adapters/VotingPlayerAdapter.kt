@@ -7,6 +7,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.example.uploadingscreen.R
+import com.example.uploadingscreen.game.GameSession
 
 class VotingPlayerAdapter(
     private val userIds: List<String>,
@@ -49,8 +50,8 @@ class VotingPlayerAdapter(
         // Format name to uppercase to fit cyberpunk vibe
         holder.tvName.text = if (userId == myUserId) "${username.uppercase()} (YOU)" else username.uppercase()
 
-        // Assign a consistent character avatar by cycling through available resources
-        val avatarRes = avatars[position % avatars.size]
+        // same avatar for a player in every meeting, even after others die
+        val avatarRes = avatars[GameSession.avatarIndex(userId, position) % avatars.size]
         holder.imgAvatar.setImageResource(avatarRes)
 
         // Show/hide voted status badge

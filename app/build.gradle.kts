@@ -52,6 +52,8 @@ android {
     buildFeatures {
 
         viewBinding= true
+        // BuildConfig.DEBUG gates the debug panel and HTTP body logging
+        buildConfig = true
     }
 }
 
